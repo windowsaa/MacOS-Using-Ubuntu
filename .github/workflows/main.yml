@@ -1,0 +1,53 @@
+name: MACOS INSIDE UBUNTU
+
+on:
+  workflow_dispatch:
+
+jobs:
+  setup-ubuntu-host:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Install dependencies
+        run: |
+          sudo apt update
+          sudo apt install -y qemu-kvm libvirt-daemon-system bridge-utils python3 python3-pip git
+
+      - name: Clone macOS-Simple-KVM
+        run: |
+          git clone https://github.com/foxlet/macOS-Simple-KVM.git
+          cd macOS-Simple-KVM
+
+      - name: Fetch macOS installer
+        run: |
+          cd macOS-Simple-KVM
+          ./jumpstart.sh --catalina
+
+      - name: Create persistent disk
+        run: |
+          cd macOS-Simple-KVM
+          qemu-img create -f qcow2 macOS.qcow2 64G
+
+      - name: Launch macOS VM with GUI via VNC
+        run: |
+          cd macOS-Simple-KVM
+          HEADLESS=1 MEM=4G CPUS=4 SYSTEM_DISK=macOS.qcow2 ./headless.sh
+
+  setup-macos-guest:
+    runs-on: macos-latest
+    needs: setup-ubuntu-host
+    steps:
+      - name: Install Homebrew
+        run: |
+          /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+
+      - name: Install Tailscale
+        run: |
+          brew install tailscale
+
+      - name: Start Tailscale
+        run: |
+          sudo tailscale up --ssh --hostname=macos-vm
+
+      - name: Verify Tailscale status
+        run: |
+          tailscale status
